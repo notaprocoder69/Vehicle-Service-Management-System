@@ -56,7 +56,7 @@ function getTopSpendingCustomer($conn) {
             c.name,
             c.phone_number,
             c.email,
-            COALESCE(SUM(CAST(p.cost AS DECIMAL(10,2))), 0.00) as total_spent
+            CAST(SUM(p.cost) AS DECIMAL(10,2)) as total_spent
         FROM 
             customer c
         LEFT JOIN 
@@ -70,11 +70,42 @@ function getTopSpendingCustomer($conn) {
         LIMIT 1
     ";
     
+    // Debugging: Log the raw SQL query
+    error_log("Top Spending Customer Query: " . $sql);
+    
     $result = $conn->query($sql);
     
     if (!$result) {
         error_log("Error in getTopSpendingCustomer: " . $conn->error);
         return null;
+    }
+    
+    // Fetch and log all customer spending
+    $debug_sql = "
+        SELECT 
+            c.cust_id, 
+            c.name, 
+            CAST(SUM(p.cost) AS DECIMAL(10,2)) as total_spent,
+            GROUP_CONCAT(CONCAT('Payment ID: ', p.payment_id, ', Cost: $', p.cost) SEPARATOR '; ') as payment_details
+        FROM 
+            customer c
+        LEFT JOIN 
+            payment p ON c.cust_id = p.cust_id
+        GROUP BY 
+            c.cust_id, c.name
+        ORDER BY 
+            total_spent DESC
+    ";
+    
+    $debug_result = $conn->query($debug_sql);
+    while ($debug_row = $debug_result->fetch_assoc()) {
+        error_log(sprintf(
+            "Customer ID: %d, Name: %s, Total Spent: $%s, Payments: %s", 
+            $debug_row['cust_id'], 
+            $debug_row['name'], 
+            $debug_row['total_spent'], 
+            $debug_row['payment_details']
+        ));
     }
     
     return $result->fetch_assoc();
@@ -413,20 +444,20 @@ if ($errorMessage) {
         // Fetch and display the results
         while ($row = $result->fetch_assoc()) {
             echo "<tr>
-                    <td>" . htmlspecialchars($row['customer_name']) . "</td>
-                    <td>" . htmlspecialchars($row['customer_phone']) . "</td>
-                    <td>" . htmlspecialchars($row['customer_email']) . "</td>
-                    <td>" . htmlspecialchars($row['customer_address']) . "</td>
-                    <td>" . htmlspecialchars($row['vehicle_model']) . "</td>
-                    <td>" . htmlspecialchars($row['appointment_date']) . "</td>
-                    <td>" . htmlspecialchars($row['service_type']) . "</td>
-                    <td>" . htmlspecialchars($row['technician_name']) . "</td>
-                    <td>" . htmlspecialchars($row['service_description']) . "</td>
-                    <td>$" . number_format($row['service_cost'], 2) . "</td>
-                    <td>$" . number_format($row['payment_amount'], 2) . "</td>
-                    <td>" . (isset($row['customer_review']) ? htmlspecialchars($row['customer_review']) : "No Review") . "</td>
-                    <td>" . (isset($row['review_date']) ? htmlspecialchars($row['review_date']) : "N/A") . "</td>
-                  </tr>";
+                    <td>" . htmlspecialchars($row['customer_name'] ?? 'N/A') . "</td>
+                    <td>" . htmlspecialchars($row['customer_phone'] ?? 'N/A') . "</td>
+                    <td>" . htmlspecialchars($row['customer_email'] ?? 'N/A') . "</td>
+                    <td>" . htmlspecialchars($row['customer_address'] ?? 'N/A') . "</td>
+                    <td>" . htmlspecialchars($row['vehicle_model'] ?? 'N/A') . "</td>
+                    <td>" . htmlspecialchars($row['appointment_date'] ?? 'N/A') . "</td>
+                    <td>" . htmlspecialchars($row['service_type'] ?? 'N/A') . "</td>
+                    <td>" . htmlspecialchars($row['technician_name'] ?? 'N/A') . "</td>
+                    <td>" . htmlspecialchars($row['service_description'] ?? 'N/A') . "</td>
+                    <td>$" . number_format($row['service_cost'] ?? 0, 2) . "</td>
+                    <td>$" . number_format($row['payment_amount'] ?? 0, 2) . "</td>
+                    <td>" . htmlspecialchars($row['customer_review'] ?? 'No Review') . "</td>
+                    <td>" . htmlspecialchars($row['review_date'] ?? 'N/A') . "</td>
+                </tr>";
         }
         echo "</tbody></table>";
     } else {
